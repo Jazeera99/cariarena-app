@@ -3,14 +3,8 @@ import 'package:sizer/sizer.dart';
 import 'package:provider/provider.dart';
 import 'package:CariArena/routes/app_routes.dart';
 import 'package:CariArena/providers/auth_provider.dart';
-
-import 'package:flutter/material.dart';
-import 'package:sizer/sizer.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
-
-import 'package:CariArena/routes/app_routes.dart';
-import 'package:CariArena/providers/auth_provider.dart';
+// import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

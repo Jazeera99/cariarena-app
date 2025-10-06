@@ -18,6 +18,8 @@ class BookingSummaryScreen extends StatefulWidget {
   final List<String> selectedTimeSlots;
   final double totalPrice;
   final int totalDuration;
+  final String token;
+  final String reservationId;
 
   const BookingSummaryScreen({
     super.key,
@@ -26,6 +28,8 @@ class BookingSummaryScreen extends StatefulWidget {
     required this.selectedTimeSlots,
     required this.totalPrice,
     required this.totalDuration,
+    required this.token,
+    required this.reservationId,
   });
 
   @override
@@ -35,7 +39,7 @@ class BookingSummaryScreen extends StatefulWidget {
 class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   final TextEditingController _specialRequestsController =
       TextEditingController();
-  String _selectedPaymentMethod = "credit_card";
+  // String _selectedPaymentMethod = "credit_card";
   bool _termsAccepted = false;
   bool _isProcessingPayment = false;
 
@@ -119,18 +123,24 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
 
     try {
       final pricing = bookingSummary?['pricing'] ?? {};
+      final userData = bookingSummary?['user'] ?? {};
       final reservationData = {
         "field_id": widget.fieldData['id'],
         "date": widget.selectedDate.toIso8601String().substring(0, 10),
         "time_slots": widget.selectedTimeSlots,
         "special_requests": _specialRequestsController.text,
-        "payment_method": _selectedPaymentMethod,
-        "sub_total": pricing['field_price'] ?? 0,
+        // "payment_method": _selectedPaymentMethod,
+        "sub_total": pricing['sub_total'] ?? 0,
         "service_fee": pricing['service_fee'] ?? 0,
         "final_amount": pricing['total'] ?? 0,
       };
 
       await ApiService().createReservation(reservationData);
+
+      final snapToken = await ApiService().createPayment(
+        widget.token,
+        widget.reservationId,
+      );
 
       if (mounted) {
         // Pastikan semua field wajib String tidak null
@@ -153,7 +163,12 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => PaymentScreen(summaryData: safeSummary),
+            builder:
+                (context) => PaymentScreen(
+                  summaryData: safeSummary,
+                  token: widget.token,
+                  reservationId: reservationData['field_id'].toString(),
+                ),
           ),
         );
       }
@@ -240,37 +255,37 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                       controller: _specialRequestsController,
                       onChanged: (value) {},
                     ),
-                    PaymentMethodCard(
-                      selectedMethod: _selectedPaymentMethod,
-                      onMethodSelected: (method) {
-                        setState(() {
-                          _selectedPaymentMethod = method;
-                        });
-                      },
-                      paymentMethods: [
-                        {
-                          "id": "credit_card",
-                          "name": "Kartu Kredit/Debit",
-                          "description": "Visa, Mastercard, JCB",
-                          "icon":
-                              "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3",
-                        },
-                        {
-                          "id": "bank_transfer",
-                          "name": "Transfer Bank",
-                          "description": "BCA, Mandiri, BNI, BRI",
-                          "icon":
-                              "https://images.unsplash.com/photo-1554224155-6726b3ff858f?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3",
-                        },
-                        {
-                          "id": "e_wallet",
-                          "name": "E-Wallet",
-                          "description": "GoPay, OVO, DANA, LinkAja",
-                          "icon":
-                              "https://images.unsplash.com/photo-1563013544-824ae1b704d3?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3",
-                        },
-                      ],
-                    ),
+                    // PaymentMethodCard(
+                    //   selectedMethod: _selectedPaymentMethod,
+                    //   onMethodSelected: (method) {
+                    //     setState(() {
+                    //       _selectedPaymentMethod = method;
+                    //     });
+                    //   },
+                    //   paymentMethods: [
+                    //     {
+                    //       "id": "credit_card",
+                    //       "name": "Kartu Kredit/Debit",
+                    //       "description": "Visa, Mastercard, JCB",
+                    //       "icon":
+                    //           "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3",
+                    //     },
+                    //     {
+                    //       "id": "bank_transfer",
+                    //       "name": "Transfer Bank",
+                    //       "description": "BCA, Mandiri, BNI, BRI",
+                    //       "icon":
+                    //           "https://images.unsplash.com/photo-1554224155-6726b3ff858f?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3",
+                    //     },
+                    //     {
+                    //       "id": "e_wallet",
+                    //       "name": "E-Wallet",
+                    //       "description": "GoPay, OVO, DANA, LinkAja",
+                    //       "icon":
+                    //           "https://images.unsplash.com/photo-1563013544-824ae1b704d3?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3",
+                    //     },
+                    //   ],
+                    // ),
                     TermsAcceptanceWidget(
                       isAccepted: _termsAccepted,
                       onChanged: (value) {

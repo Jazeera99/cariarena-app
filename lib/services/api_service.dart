@@ -5,8 +5,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/field_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+// import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class ApiService {
-  static const String _baseUrl = 'http://192.168.110.217:8081/api';
+  static const String _baseUrl = 'http://192.168.110.143:8081/api';
+  static String get midtransMerchantBaseUrl => "$_baseUrl/payments/create";
+
+  // static final String _baseUrl =
+  //     dotenv.env['API_BASE_URL'] ?? 'http://192.168.110.95:8081/api';
   static const storage = FlutterSecureStorage();
   // static Future<void> fetchCsrfCookie() async {
   //   final url = Uri.parse('http://192.168.0.109:8081/sanctum/csrf-cookie');
@@ -122,33 +128,6 @@ class ApiService {
     }
   }
 
-  Future<void> initiatePayment(String reservationId, String authToken) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/payments/initiate'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $authToken',
-        },
-        body: json.encode({'reservation_id': reservationId}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final snapToken = data['snap_token'];
-
-        // Membuka URL pembayaran di browser
-        _openMidtransPaymentPage(snapToken);
-      } else {
-        // Menampilkan pesan error
-        throw Exception('Gagal menginisiasi pembayaran: ${response.body}');
-      }
-    } catch (e) {
-      print('Terjadi error: $e');
-      throw Exception('Gagal menghubungi server.');
-    }
-  }
-
   void _openMidtransPaymentPage(String snapToken) async {
     final url = 'https://app.sandbox.midtrans.com/snap/v1/redirect/$snapToken';
     if (await canLaunchUrl(Uri.parse(url))) {
@@ -254,6 +233,7 @@ class ApiService {
       url,
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       },
       body: jsonEncode(reservationData),
@@ -262,6 +242,44 @@ class ApiService {
     if (response.statusCode != 201 && response.statusCode != 200) {
       print('Response error: ${response.body}');
       throw Exception('Gagal membuat reservasi: ${response.body}');
+    }
+  }
+
+  Future<String?> createPayment(String token, String reservationId) async {
+    final response = await http.post(
+      Uri.parse("$_baseUrl/payments/create"),
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({"reservation_id": reservationId}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['snap_token']; // return snapToken
+    } else {
+      print("Error: ${response.body}");
+      return null;
+    }
+  }
+
+  Future<void> updatePaymentStatus(
+    String token,
+    String reservationId,
+    String status,
+  ) async {
+    final response = await http.post(
+      Uri.parse("$_baseUrl/payments/update-status"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({"reservation_id": reservationId, "status": status}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Gagal update status pembayaran: ${response.body}");
     }
   }
 

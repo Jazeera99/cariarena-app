@@ -4,6 +4,7 @@ import 'package:sizer/sizer.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/app_export.dart';
 import '../../widgets/custom_icon_widget.dart';
@@ -108,7 +109,7 @@ class _BookingCalendarScreenState extends State<BookingCalendarScreen> {
     _fetchVenueData();
   }
 
-  void _handleProceedToPayment() {
+  void _handleProceedToPayment() async {
     if (_selectedTimeSlots.isEmpty) {
       _showErrorMessage('Silakan pilih setidaknya satu waktu booking.');
       return;
@@ -131,6 +132,9 @@ class _BookingCalendarScreenState extends State<BookingCalendarScreen> {
       return;
     }
 
+    // Fetch token
+    final token = await const FlutterSecureStorage().read(key: 'authToken');
+
     // Navigate to booking summary screen with booking details
     Navigator.pushNamed(
       context,
@@ -141,6 +145,8 @@ class _BookingCalendarScreenState extends State<BookingCalendarScreen> {
         'selectedTimeSlots': _selectedTimeSlots,
         'totalPrice': _calculateTotalPrice(),
         'totalDuration': _calculateTotalDuration(),
+        'token': token,
+        'reservationId': _fieldData!['id'].toString(),
       },
     );
   }

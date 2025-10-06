@@ -1,8 +1,11 @@
 import 'dart:async';
+// import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'package:flutter/material.dart';
 import 'package:sizer/sizer.dart';
 import 'package:intl/intl.dart';
+import 'package:midtrans_sdk/midtrans_sdk.dart';
+import '../../services/api_service.dart';
 
 import '../../core/app_export.dart';
 import '../../widgets/payment/bank_transfer_details.dart';
@@ -12,8 +15,15 @@ import '../../widgets/payment/payment_status_widget.dart';
 import '../../widgets/payment/payment_timer_widget.dart';
 
 class PaymentScreen extends StatefulWidget {
-  final Map<String, dynamic> summaryData;
-  const PaymentScreen({super.key, required this.summaryData});
+  final String reservationId;
+  final String token; // Bearer token user
+  final dynamic summaryData;
+  const PaymentScreen({
+    Key? key,
+    required this.token,
+    required this.reservationId,
+    required this.summaryData,
+  }) : super(key: key);
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -28,6 +38,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   String _paymentStatus = '';
   String _bookingReference = '';
   bool _showSecurityWarning = false;
+  late MidtransSDK _midtrans;
+  String? snapToken;
+  final apiService = ApiService();
 
   Map<String, dynamic> _realBookingData = {};
 
@@ -107,12 +120,72 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     _mapSummaryDataToDisplayData();
 
+    _initMidtrans();
+    _initPayment();
+
     // Show security warning after 2 seconds
     Timer(const Duration(seconds: 2), () {
       if (mounted) {
         setState(() {
           _showSecurityWarning = true;
         });
+      }
+    });
+  }
+
+  Future<void> _initPayment() async {
+    try {
+      final token = await apiService.createPayment(
+        widget.token,
+        widget.reservationId,
+      );
+      if (token != null && token.isNotEmpty) {
+        setState(() => snapToken = token);
+        print("✅ Snap Token asli dari backend: $snapToken");
+      } else {
+        print("❌ Snap Token kosong, cek backend Laravel!");
+      }
+    } catch (e) {
+      print("❌ Error ambil Snap Token: $e");
+    }
+  }
+
+  Future<void> _initMidtrans() async {
+    final midtrans = await MidtransSDK.init(
+      config: MidtransConfig(
+        clientKey: "SB-Mid-client-9q6TGT-J0ElyEozJ",
+        merchantBaseUrl: ApiService.midtransMerchantBaseUrl,
+        colorTheme: ColorTheme(
+          colorPrimary: Theme.of(context).primaryColor,
+          colorPrimaryDark: Theme.of(context).primaryColorDark,
+          colorSecondary: Theme.of(context).colorScheme.secondary,
+        ),
+      ),
+    );
+
+    // simpan instance
+    setState(() {
+      _midtrans = midtrans;
+    });
+
+    // pasang listener event
+    _midtrans.setTransactionFinishedCallback((result) async {
+      print("Transaction selesai: $result");
+      if (result.transactionStatus == 'success' ||
+          result.transactionStatus == 'settlement') {
+        setState(() => _paymentStatus = 'success');
+        await apiService.updatePaymentStatus(
+          widget.token,
+          widget.reservationId,
+          "success",
+        );
+      } else {
+        setState(() => _paymentStatus = 'failed');
+        await apiService.updatePaymentStatus(
+          widget.token,
+          widget.reservationId,
+          "failed",
+        );
       }
     });
   }
@@ -185,51 +258,27 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   void _processPayment() async {
-    if (_selectedPaymentMethod.isEmpty) {
-      _showErrorSnackBar('Pilih metode pembayaran terlebih dahulu');
-      return;
-    }
-
-    if (_selectedPaymentMethod == 'card' && _cardData.isEmpty) {
-      _showErrorSnackBar('Lengkapi data kartu terlebih dahulu');
-      return;
-    }
-
-    if (_selectedPaymentMethod == 'bank_transfer' && _selectedBank.isEmpty) {
-      _showErrorSnackBar('Pilih bank terlebih dahulu');
-      return;
-    }
-
-    if (_selectedPaymentMethod == 'ewallet' && _selectedEWallet.isEmpty) {
-      _showErrorSnackBar('Pilih e-wallet terlebih dahulu');
-      return;
-    }
-
     setState(() {
       _isProcessing = true;
     });
 
-    // Simulate payment processing
-    await Future.delayed(const Duration(seconds: 3));
-
-    // Simulate random payment result (80% success rate)
-    final isSuccess = DateTime.now().millisecond % 10 < 8;
-
-    setState(() {
-      _isProcessing = false;
-      _paymentStatus = isSuccess ? 'success' : 'failed';
-    });
-
-    if (isSuccess) {
-      _showPaymentResult(
-        'success',
-        'Pembayaran Anda telah berhasil diproses. Booking telah dikonfirmasi dan Anda akan menerima email konfirmasi segera.',
+    try {
+      // 1. Minta snap token ke backend Laravel
+      final snapToken = await apiService.createPayment(
+        widget.token,
+        widget.reservationId,
       );
-    } else {
-      _showPaymentResult(
-        'failed',
-        'Pembayaran gagal diproses. Silakan periksa kembali data pembayaran Anda atau coba metode pembayaran lain.',
-      );
+
+      // 2. Jalankan Midtrans SDK
+      await _midtrans.startPaymentUiFlow(token: snapToken);
+
+      // Status pembayaran dihandle oleh callback Midtrans
+    } catch (e) {
+      _showErrorSnackBar("Gagal memulai pembayaran: $e");
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
     }
   }
 
@@ -309,10 +358,38 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Scaffold(
       backgroundColor: AppTheme.lightTheme.scaffoldBackgroundColor,
       appBar: _buildAppBar(),
-      body: _isProcessing ? _buildProcessingView() : _buildPaymentView(),
+      body:
+          snapToken == null
+              ? const Center(child: CircularProgressIndicator())
+              : _isProcessing
+              ? _buildProcessingView()
+              : _buildPaymentView(),
       bottomNavigationBar: _isProcessing ? null : _buildBottomBar(),
     );
   }
+
+  // @override
+  // Widget build(BuildContext context) {
+  //   return Scaffold(
+  //     appBar: AppBar(title: const Text("Pembayaran")),
+  //     body: Center(
+  //       child:
+  //           snapToken == null
+  //               ? const CircularProgressIndicator()
+  //               : Text("Snap Token berhasil dibuat: $snapToken"),
+  //     ),
+  //   );
+  // }
+
+  // @override
+  // Widget build(BuildContext context) {
+  //   return Scaffold(
+  //     backgroundColor: AppTheme.lightTheme.scaffoldBackgroundColor,
+  //     appBar: _buildAppBar(),
+  //     body: _isProcessing ? _buildProcessingView() : _buildPaymentView(),
+  //     bottomNavigationBar: _isProcessing ? null : _buildBottomBar(),
+  //   );
+  // }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(

@@ -57,6 +57,8 @@ class AppRoutes {
                   selectedTimeSlots: args['selectedTimeSlots'],
                   totalPrice: args['totalPrice'],
                   totalDuration: args['totalDuration'],
+                  token: args['token'],
+                  reservationId: args['reservationId'],
                 ),
           );
         }
